@@ -1,114 +1,125 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
-export default function Dashboard({ username, onLogout }) {
-  const [sport, setSport] = useState("baseball");
-  const [leagueId, setLeagueId] = useState("");
-  const [sheetUrl, setSheetUrl] = useState(
-    "https://docs.google.com/spreadsheets/d/1xOTF5J065gABOOVm930ANNcq0kGooZ6Ua7GdrY6b5sc/edit?usp=sharing"
+const PHASE_LABELS = {
+  starting: "Starting…",
+  logging_in: "Logging in",
+  waiting_room: "In waiting room",
+  draft_live: "Draft live",
+  completed: "Completed",
+  error: "Error",
+};
+
+const STATUS_COLORS = {
+  queued: "#888",
+  running: "#2563eb",
+  succeeded: "#16a34a",
+  failed: "#dc2626",
+  canceled: "#888",
+};
+
+function StatusBadge({ status, phase }) {
+  const color = STATUS_COLORS[status] || "#888";
+  const label = status === "running" && phase
+    ? `${PHASE_LABELS[phase] || phase}`
+    : status;
+  return (
+    <span style={{ color, fontWeight: 600, textTransform: "capitalize" }}>
+      {label}
+    </span>
   );
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [runStatus, setRunStatus] = useState(null);
-  const [health, setHealth] = useState("unknown");
+}
 
-  useEffect(() => {
-    if (!API_URL) {
-      setHealth("down");
-      return;
-    }
+function ActiveDraftPanel({ draft, job, onCancel }) {
+  const isTerminal =
+    !job || ["succeeded", "failed", "canceled"].includes(job.status);
 
-    let cancelled = false;
+  return (
+    <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: "1.25rem", marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+        <h2 style={{ margin: 0 }}>Active Draft</h2>
+        {!isTerminal && (
+          <button
+            onClick={onCancel}
+            style={{ fontSize: "0.85rem", color: "#dc2626", background: "none", border: "1px solid #dc2626", borderRadius: 4, padding: "0.25rem 0.6rem", cursor: "pointer" }}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
 
-    async function poll() {
-      try {
-        const res = await fetch(`${API_URL}/health`, { cache: "no-store" });
-        if (!cancelled) setHealth(res.ok ? "ok" : "down");
-      } catch {
-        if (!cancelled) setHealth("down");
-      }
-    }
+      <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1rem", margin: 0 }}>
+        <dt style={{ color: "#555" }}>League</dt>
+        <dd style={{ margin: 0 }}>{draft.leagueId}</dd>
 
-    poll();
-    const id = setInterval(poll, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+        <dt style={{ color: "#555" }}>Sport</dt>
+        <dd style={{ margin: 0, textTransform: "capitalize" }}>{draft.sport}</dd>
+
+        <dt style={{ color: "#555" }}>Sheet</dt>
+        <dd style={{ margin: 0 }}>
+          {draft.sheetUrl
+            ? <a href={draft.sheetUrl} target="_blank" rel="noreferrer">Open sheet</a>
+            : <span style={{ color: "#888" }}>Not provisioned</span>}
+        </dd>
+
+        <dt style={{ color: "#555" }}>Status</dt>
+        <dd style={{ margin: 0 }}>
+          {job
+            ? <StatusBadge status={job.status} phase={job.phase} />
+            : <span style={{ color: "#888" }}>No job</span>}
+        </dd>
+      </dl>
+
+      {draft.sheetUrl && (
+        <iframe
+          title="Draft Sheet"
+          src={draft.sheetUrl}
+          style={{ width: "100%", height: "65vh", border: "1px solid #ccc", marginTop: "1.25rem", borderRadius: 4 }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NewDraftForm({ onCreated }) {
+  const [leagueId, setLeagueId] = useState("");
+  const [sport, setSport] = useState("baseball");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!leagueId.trim()) {
-      setRunStatus("Please enter a league ID.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setRunStatus(null);
-
+    if (!leagueId.trim()) return;
+    setError(null);
+    setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/worker/run`, {
+      const res = await fetch(`${API_URL}/drafts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ leagueId: leagueId.trim(), sport }),
       });
-
       const data = await res.json().catch(() => ({}));
-
       if (res.ok) {
-        setRunStatus(
-          `Started: league=${data.leagueId || leagueId.trim()}, sport=${data.sport || sport}`
-        );
+        onCreated(data);
       } else {
-        setRunStatus(`Error: ${data.error || res.statusText}`);
+        setError(data.message || "Failed to create draft");
       }
-    } catch (err) {
-      setRunStatus(`Request failed: ${err?.message || String(err)}`);
+    } catch {
+      setError("Could not reach the server");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   }
 
-  async function handleLogout() {
-    await fetch(`${API_URL}/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    });
-    onLogout();
-  }
-
-  const healthLabel =
-    health === "ok" ? "Online" : health === "down" ? "Offline" : "Checking…";
-  const healthColor =
-    health === "ok" ? "green" : health === "down" ? "red" : "gray";
-
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "1.5rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-        <h1 style={{ margin: 0 }}>Fantasy Draft Tracker</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={{ color: "#555" }}>{username}</span>
-          <button onClick={handleLogout} style={{ fontSize: "0.85rem" }}>
-            Sign out
-          </button>
-        </div>
-      </div>
-
-      <p style={{ color: "#555", marginBottom: "0.75rem" }}>
-        Fill in your league info and start the worker.
-      </p>
-
-      <p style={{ marginBottom: "1.25rem" }}>
-        Backend:{" "}
-        <strong style={{ color: healthColor }}>{healthLabel}</strong>
-      </p>
-
-      <form onSubmit={handleSubmit} style={{ marginBottom: "1.5rem" }}>
+    <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: "1.25rem", marginBottom: "1.5rem" }}>
+      <h2 style={{ marginTop: 0 }}>New Draft</h2>
+      <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: "0.75rem" }}>
           <label>
-            <div>Sport</div>
+            <div style={{ marginBottom: "0.25rem" }}>Sport</div>
             <select
               value={sport}
               onChange={(e) => setSport(e.target.value)}
@@ -120,55 +131,102 @@ export default function Dashboard({ username, onLogout }) {
           </label>
         </div>
 
-        <div style={{ marginBottom: "0.75rem" }}>
+        <div style={{ marginBottom: "1rem" }}>
           <label>
-            <div>League ID</div>
+            <div style={{ marginBottom: "0.25rem" }}>League ID</div>
             <input
               type="text"
               value={leagueId}
               onChange={(e) => setLeagueId(e.target.value)}
               style={{ width: "100%", maxWidth: 240 }}
               placeholder="e.g. 123456"
+              required
             />
           </label>
         </div>
 
-        <div style={{ marginBottom: "0.75rem" }}>
-          <label>
-            <div>Google Sheet URL</div>
-            <input
-              type="text"
-              value={sheetUrl}
-              onChange={(e) => setSheetUrl(e.target.value)}
-              style={{ width: "100%" }}
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-            />
-          </label>
-        </div>
+        {error && <p style={{ color: "red", marginBottom: "0.75rem" }}>{error}</p>}
 
-        <button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Starting…" : "Start Draft Automation"}
+        <button type="submit" disabled={loading}>
+          {loading ? "Creating…" : "Start Draft"}
         </button>
       </form>
+    </div>
+  );
+}
 
-      {runStatus && (
-        <p style={{ marginBottom: "1.5rem" }}>
-          <strong>{runStatus}</strong>
-        </p>
+export default function Dashboard({ username, onLogout }) {
+  const [activeDraft, setActiveDraft] = useState(undefined); // undefined = not fetched yet
+  const [loadError, setLoadError] = useState(null);
+
+  const fetchActive = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/drafts/active`, { credentials: "include" });
+      if (!res.ok) throw new Error("fetch failed");
+      const data = await res.json();
+      setActiveDraft(data); // { draft, job } or null
+      setLoadError(null);
+    } catch {
+      setLoadError("Could not load draft status");
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => { fetchActive(); }, [fetchActive]);
+
+  // Poll while a draft is active and the job is not terminal
+  useEffect(() => {
+    if (!activeDraft?.job) return;
+    const { status } = activeDraft.job;
+    if (["succeeded", "failed", "canceled"].includes(status)) return;
+
+    const id = setInterval(fetchActive, 5000);
+    return () => clearInterval(id);
+  }, [activeDraft, fetchActive]);
+
+  async function handleCancel() {
+    if (!activeDraft?.draft) return;
+    await fetch(`${API_URL}/drafts/${activeDraft.draft.id}/cancel`, {
+      method: "POST",
+      credentials: "include",
+    });
+    fetchActive();
+  }
+
+  async function handleLogout() {
+    await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+    onLogout();
+  }
+
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "1.5rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+        <h1 style={{ margin: 0 }}>DraftPilot</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <span style={{ color: "#555" }}>{username}</span>
+          <button onClick={handleLogout} style={{ fontSize: "0.85rem" }}>Sign out</button>
+        </div>
+      </div>
+
+      {loadError && (
+        <p style={{ color: "red" }}>{loadError}</p>
       )}
 
-      <section>
-        <h2>Draft Sheet</h2>
-        {sheetUrl ? (
-          <iframe
-            title="Draft Sheet"
-            src={sheetUrl}
-            style={{ width: "100%", height: "70vh", border: "1px solid #ccc" }}
-          />
-        ) : (
-          <p style={{ color: "#777" }}>Paste a Google Sheet URL to see it here.</p>
-        )}
-      </section>
+      {activeDraft === undefined && !loadError && (
+        <p style={{ color: "#888" }}>Loading…</p>
+      )}
+
+      {activeDraft === null && (
+        <NewDraftForm onCreated={() => fetchActive()} />
+      )}
+
+      {activeDraft?.draft && (
+        <ActiveDraftPanel
+          draft={activeDraft.draft}
+          job={activeDraft.job}
+          onCancel={handleCancel}
+        />
+      )}
     </div>
   );
 }
