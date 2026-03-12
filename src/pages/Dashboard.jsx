@@ -166,9 +166,9 @@ export default function Dashboard({ username, onLogout }) {
   const fetchActive = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/drafts/active`, { headers: authHeaders() });
-      if (!res.ok) throw new Error("fetch failed");
-      const data = await res.json();
-      setActiveDraft(data); // { draft, job } or null
+      if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+      const text = await res.text();
+      setActiveDraft(text.length ? JSON.parse(text) : null);
       setLoadError(null);
     } catch {
       setLoadError("Could not load draft status");
