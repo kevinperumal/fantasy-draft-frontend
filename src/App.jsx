@@ -10,7 +10,14 @@ export default function App() {
   const [username, setUsername] = useState(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/auth/me`, { credentials: "include" })
+    const token = sessionStorage.getItem("auth_token");
+    if (!token) {
+      setAuthState("unauthenticated");
+      return;
+    }
+    fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((res) => {
         if (res.ok) return res.json();
         throw new Error("unauthenticated");
@@ -20,6 +27,7 @@ export default function App() {
         setAuthState("authenticated");
       })
       .catch(() => {
+        sessionStorage.removeItem("auth_token");
         setAuthState("unauthenticated");
       });
   }, []);

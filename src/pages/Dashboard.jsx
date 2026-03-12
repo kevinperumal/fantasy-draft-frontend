@@ -19,6 +19,11 @@ const STATUS_COLORS = {
   canceled: "#888",
 };
 
+function authHeaders() {
+  const token = sessionStorage.getItem("auth_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function StatusBadge({ status, phase }) {
   const color = STATUS_COLORS[status] || "#888";
   const label = status === "running" && phase
@@ -96,8 +101,7 @@ function NewDraftForm({ onCreated }) {
     try {
       const res = await fetch(`${API_URL}/drafts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ leagueId: leagueId.trim(), sport }),
       });
       const data = await res.json().catch(() => ({}));
@@ -161,7 +165,7 @@ export default function Dashboard({ username, onLogout }) {
 
   const fetchActive = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/drafts/active`, { credentials: "include" });
+      const res = await fetch(`${API_URL}/drafts/active`, { headers: authHeaders() });
       if (!res.ok) throw new Error("fetch failed");
       const data = await res.json();
       setActiveDraft(data); // { draft, job } or null
@@ -188,13 +192,14 @@ export default function Dashboard({ username, onLogout }) {
     if (!activeDraft?.draft) return;
     await fetch(`${API_URL}/drafts/${activeDraft.draft.id}/cancel`, {
       method: "POST",
-      credentials: "include",
+      headers: authHeaders(),
     });
     fetchActive();
   }
 
   async function handleLogout() {
-    await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+    await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: authHeaders() });
+    sessionStorage.removeItem("auth_token");
     onLogout();
   }
 

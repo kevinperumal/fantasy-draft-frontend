@@ -17,13 +17,13 @@ export default function Login({ onLogin }) {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ username, password }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
+        sessionStorage.setItem("auth_token", data.token);
         onLogin(data.username);
       } else {
         setError(data.message || "Invalid credentials");
