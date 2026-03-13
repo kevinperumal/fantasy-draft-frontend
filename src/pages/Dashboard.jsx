@@ -80,7 +80,7 @@ function ActiveDraftPanel({ draft, job, onCancel }) {
         <iframe
           title="Draft Sheet"
           src={draft.sheetUrl}
-          style={{ width: "100%", height: "65vh", border: "1px solid #ccc", marginTop: "1.25rem", borderRadius: 4 }}
+          style={{ width: "100%", height: "75vh", minHeight: 400, border: "1px solid #ccc", marginTop: "1.25rem", borderRadius: 4, display: "block" }}
         />
       )}
     </div>
@@ -204,12 +204,12 @@ export default function Dashboard({ username, onLogout }) {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "1.5rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-        <h1 style={{ margin: 0 }}>DraftPilot</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span style={{ color: "#555" }}>{username}</span>
-          <button onClick={handleLogout} style={{ fontSize: "0.85rem" }}>Sign out</button>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "1rem 1.25rem", boxSizing: "border-box" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+        <h1 style={{ margin: 0, whiteSpace: "nowrap" }}>DraftPilot</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+          <span style={{ color: "#555", fontSize: "0.9rem" }}>{username}</span>
+          <button onClick={handleLogout} style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>Sign out</button>
         </div>
       </div>
 
