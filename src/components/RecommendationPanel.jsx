@@ -41,7 +41,7 @@ export default function RecommendationPanel({ recommendation, loading, error, on
             Pick #{context.currentPick}
             {context.nextPick ? ` · next: #${context.nextPick} (${context.picksUntilNext} away)` : ""}
             {" · "}
-            {context.rosterCount} on roster
+            {context.rosterCount}/25 drafted
           </span>
           <button onClick={onGenerate} style={{ fontSize: "0.85rem" }}>Refresh</button>
         </div>
