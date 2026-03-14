@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import RecommendationPanel from "../components/RecommendationPanel";
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -36,9 +37,62 @@ function StatusBadge({ status, phase }) {
   );
 }
 
-function ActiveDraftPanel({ draft, job, onCancel }) {
+// ─── AI recommendation hook ──────────────────────────────────────────────────
+
+function useRecommendation(aiEnabled, draftPhase) {
+  const [recommendation, setRecommendation] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const generate = useCallback(async () => {
+    if (!aiEnabled) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/recommendations/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        setError(data.error || data.message || "Recommendation failed");
+      } else {
+        setRecommendation(data);
+      }
+    } catch {
+      setError("Could not reach the server");
+    } finally {
+      setLoading(false);
+    }
+  }, [aiEnabled]);
+
+  // Clear stale recommendation when AI is toggled off
+  useEffect(() => {
+    if (!aiEnabled) {
+      setRecommendation(null);
+      setError(null);
+    }
+  }, [aiEnabled]);
+
+  // Clear recommendation when draft transitions out of draft_live (stale context)
+  useEffect(() => {
+    if (draftPhase !== "draft_live") setRecommendation(null);
+  }, [draftPhase]);
+
+  return { recommendation, loading, error, generate };
+}
+
+// ─── Active draft panel ───────────────────────────────────────────────────────
+
+function ActiveDraftPanel({ draft, job, onCancel, aiEnabled }) {
   const isTerminal =
     !job || ["succeeded", "failed", "canceled"].includes(job.status);
+  const isDraftLive = job?.status === "running" && job?.phase === "draft_live";
+
+  const { recommendation, loading, error, generate } = useRecommendation(
+    aiEnabled,
+    job?.phase,
+  );
 
   return (
     <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: "1.25rem", marginBottom: "1.5rem" }}>
@@ -54,12 +108,19 @@ function ActiveDraftPanel({ draft, job, onCancel }) {
         )}
       </div>
 
-      <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1rem", margin: 0 }}>
+      <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1rem", margin: "0 0 1rem" }}>
         <dt style={{ color: "#555" }}>League</dt>
         <dd style={{ margin: 0 }}>{draft.leagueId}</dd>
 
         <dt style={{ color: "#555" }}>Sport</dt>
         <dd style={{ margin: 0, textTransform: "capitalize" }}>{draft.sport}</dd>
+
+        {draft.espnTeamName && (
+          <>
+            <dt style={{ color: "#555" }}>ESPN Team</dt>
+            <dd style={{ margin: 0 }}>{draft.espnTeamName}</dd>
+          </>
+        )}
 
         <dt style={{ color: "#555" }}>Sheet</dt>
         <dd style={{ margin: 0 }}>
@@ -76,20 +137,40 @@ function ActiveDraftPanel({ draft, job, onCancel }) {
         </dd>
       </dl>
 
+      {/* AI recommendation panel — only when AI enabled and draft is live */}
+      {aiEnabled && isDraftLive && (
+        <RecommendationPanel
+          recommendation={recommendation}
+          loading={loading}
+          error={error}
+          onGenerate={generate}
+        />
+      )}
+
+      {aiEnabled && !isDraftLive && !isTerminal && (
+        <p style={{ color: "#888", fontSize: "0.85rem", margin: "0 0 1rem" }}>
+          AI recommendations will be available once the draft goes live.
+        </p>
+      )}
+
       {draft.sheetUrl && (
         <iframe
           title="Draft Sheet"
           src={draft.sheetUrl}
-          style={{ width: "100%", height: "75vh", minHeight: 400, border: "1px solid #ccc", marginTop: "1.25rem", borderRadius: 4, display: "block" }}
+          style={{ width: "100%", height: "75vh", minHeight: 400, border: "1px solid #ccc", marginTop: "0.5rem", borderRadius: 4, display: "block" }}
         />
       )}
     </div>
   );
 }
 
+// ─── New draft form ───────────────────────────────────────────────────────────
+
 function NewDraftForm({ onCreated }) {
   const [leagueId, setLeagueId] = useState("");
   const [sport, setSport] = useState("baseball");
+  const [espnTeamName, setEspnTeamName] = useState("");
+  const [leagueSize, setLeagueSize] = useState(12);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -102,7 +183,12 @@ function NewDraftForm({ onCreated }) {
       const res = await fetch(`${API_URL}/drafts`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ leagueId: leagueId.trim(), sport }),
+        body: JSON.stringify({
+          leagueId: leagueId.trim(),
+          sport,
+          espnTeamName: espnTeamName.trim() || undefined,
+          leagueSize: leagueSize || undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -121,37 +207,58 @@ function NewDraftForm({ onCreated }) {
     <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: "1.25rem", marginBottom: "1.5rem" }}>
       <h2 style={{ marginTop: 0 }}>New Draft</h2>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: "0.75rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem 1.5rem", maxWidth: 520 }}>
           <label>
-            <div style={{ marginBottom: "0.25rem" }}>Sport</div>
-            <select
-              value={sport}
-              onChange={(e) => setSport(e.target.value)}
-              style={{ width: "100%", maxWidth: 240 }}
-            >
+            <div style={{ marginBottom: "0.25rem", color: "#555", fontSize: "0.9rem" }}>Sport</div>
+            <select value={sport} onChange={(e) => setSport(e.target.value)} style={{ width: "100%" }}>
               <option value="baseball">Baseball</option>
               <option value="football">Football</option>
             </select>
           </label>
-        </div>
 
-        <div style={{ marginBottom: "1rem" }}>
           <label>
-            <div style={{ marginBottom: "0.25rem" }}>League ID</div>
+            <div style={{ marginBottom: "0.25rem", color: "#555", fontSize: "0.9rem" }}>League ID</div>
             <input
               type="text"
               value={leagueId}
               onChange={(e) => setLeagueId(e.target.value)}
-              style={{ width: "100%", maxWidth: 240 }}
+              style={{ width: "100%" }}
               placeholder="e.g. 123456"
               required
             />
           </label>
+
+          <label>
+            <div style={{ marginBottom: "0.25rem", color: "#555", fontSize: "0.9rem" }}>
+              ESPN Team Name <span style={{ color: "#aaa" }}>(for AI recs)</span>
+            </div>
+            <input
+              type="text"
+              value={espnTeamName}
+              onChange={(e) => setEspnTeamName(e.target.value)}
+              style={{ width: "100%" }}
+              placeholder="Your ESPN fantasy team"
+            />
+          </label>
+
+          <label>
+            <div style={{ marginBottom: "0.25rem", color: "#555", fontSize: "0.9rem" }}>
+              League Size <span style={{ color: "#aaa" }}>(for AI recs)</span>
+            </div>
+            <input
+              type="number"
+              value={leagueSize}
+              onChange={(e) => setLeagueSize(parseInt(e.target.value) || 12)}
+              style={{ width: "100%" }}
+              min={4}
+              max={20}
+            />
+          </label>
         </div>
 
-        {error && <p style={{ color: "red", marginBottom: "0.75rem" }}>{error}</p>}
+        {error && <p style={{ color: "red", margin: "0.75rem 0" }}>{error}</p>}
 
-        <button type="submit" disabled={loading}>
+        <button type="submit" disabled={loading} style={{ marginTop: "1rem" }}>
           {loading ? "Creating…" : "Start Draft"}
         </button>
       </form>
@@ -159,9 +266,23 @@ function NewDraftForm({ onCreated }) {
   );
 }
 
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
 export default function Dashboard({ username, onLogout }) {
-  const [activeDraft, setActiveDraft] = useState(undefined); // undefined = not fetched yet
+  const [activeDraft, setActiveDraft] = useState(undefined);
   const [loadError, setLoadError] = useState(null);
+
+  // AI toggle — persisted in localStorage
+  const [aiEnabled, setAiEnabled] = useState(() => {
+    try { return localStorage.getItem("draftpilot_ai_enabled") === "true"; }
+    catch { return false; }
+  });
+
+  function toggleAi(e) {
+    const val = e.target.checked;
+    setAiEnabled(val);
+    try { localStorage.setItem("draftpilot_ai_enabled", String(val)); } catch {}
+  }
 
   const fetchActive = useCallback(async () => {
     try {
@@ -175,15 +296,12 @@ export default function Dashboard({ username, onLogout }) {
     }
   }, []);
 
-  // Initial load
   useEffect(() => { fetchActive(); }, [fetchActive]);
 
-  // Poll while a draft is active and the job is not terminal
   useEffect(() => {
     if (!activeDraft?.job) return;
     const { status } = activeDraft.job;
     if (["succeeded", "failed", "canceled"].includes(status)) return;
-
     const id = setInterval(fetchActive, 5000);
     return () => clearInterval(id);
   }, [activeDraft, fetchActive]);
@@ -207,15 +325,25 @@ export default function Dashboard({ username, onLogout }) {
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: "1rem 1.25rem", boxSizing: "border-box" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
         <h1 style={{ margin: 0, whiteSpace: "nowrap" }}>DraftPilot</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexShrink: 0, flexWrap: "wrap" }}>
+          {/* AI toggle */}
+          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: "0.9rem" }}>
+            <input
+              type="checkbox"
+              checked={aiEnabled}
+              onChange={toggleAi}
+              style={{ width: 16, height: 16, cursor: "pointer" }}
+            />
+            <span style={{ color: aiEnabled ? "#2563eb" : "#888", fontWeight: aiEnabled ? 600 : 400 }}>
+              AI Recommendations
+            </span>
+          </label>
           <span style={{ color: "#555", fontSize: "0.9rem" }}>{username}</span>
           <button onClick={handleLogout} style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>Sign out</button>
         </div>
       </div>
 
-      {loadError && (
-        <p style={{ color: "red" }}>{loadError}</p>
-      )}
+      {loadError && <p style={{ color: "red" }}>{loadError}</p>}
 
       {activeDraft === undefined && !loadError && (
         <p style={{ color: "#888" }}>Loading…</p>
@@ -230,6 +358,7 @@ export default function Dashboard({ username, onLogout }) {
           draft={activeDraft.draft}
           job={activeDraft.job}
           onCancel={handleCancel}
+          aiEnabled={aiEnabled}
         />
       )}
     </div>
