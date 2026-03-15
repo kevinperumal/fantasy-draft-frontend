@@ -166,10 +166,12 @@ function ActiveDraftPanel({ draft, job, onCancel, aiEnabled }) {
 
 // ─── New draft form ───────────────────────────────────────────────────────────
 
-function NewDraftForm({ onCreated }) {
+const ESPN_TEAM_DEFAULTS = { kevin: "Sonnys Nuts", john: "Enzo The Bakers" };
+
+function NewDraftForm({ onCreated, username }) {
   const [leagueId, setLeagueId] = useState("");
   const [sport, setSport] = useState("baseball");
-  const [espnTeamName, setEspnTeamName] = useState("");
+  const [espnTeamName, setEspnTeamName] = useState(ESPN_TEAM_DEFAULTS[username] || "");
   const [leagueSize, setLeagueSize] = useState(12);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -350,7 +352,7 @@ export default function Dashboard({ username, onLogout }) {
       )}
 
       {activeDraft === null && (
-        <NewDraftForm onCreated={() => fetchActive()} />
+        <NewDraftForm onCreated={() => fetchActive()} username={username} />
       )}
 
       {activeDraft?.draft && (
