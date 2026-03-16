@@ -228,7 +228,7 @@ function AdminPanel() {
 
 // ─── Active draft panel ───────────────────────────────────────────────────────
 
-function ActiveDraftPanel({ draft, job, onCancel, aiEnabled }) {
+function ActiveDraftPanel({ draft, job, onCancel, onComplete, aiEnabled }) {
   const isTerminal =
     !job || ["succeeded", "failed", "canceled"].includes(job.status);
   const isDraftLive = job?.status === "running" && job?.phase === "draft_live";
@@ -243,12 +243,20 @@ function ActiveDraftPanel({ draft, job, onCancel, aiEnabled }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>Active Draft</h2>
         {!isTerminal && (
-          <button
-            onClick={onCancel}
-            style={{ fontSize: "0.85rem", color: "#dc2626", background: "none", border: "1px solid #dc2626", borderRadius: 4, padding: "0.25rem 0.6rem", cursor: "pointer" }}
-          >
-            Cancel
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              onClick={onComplete}
+              style={{ fontSize: "0.85rem", color: "#16a34a", background: "none", border: "1px solid #16a34a", borderRadius: 4, padding: "0.25rem 0.6rem", cursor: "pointer" }}
+            >
+              Mark Complete
+            </button>
+            <button
+              onClick={onCancel}
+              style={{ fontSize: "0.85rem", color: "#dc2626", background: "none", border: "1px solid #dc2626", borderRadius: 4, padding: "0.25rem 0.6rem", cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+          </div>
         )}
       </div>
 
@@ -461,6 +469,15 @@ export default function Dashboard({ username, onLogout }) {
     fetchActive();
   }
 
+  async function handleComplete() {
+    if (!activeDraft?.draft) return;
+    await fetch(`${API_URL}/drafts/${activeDraft.draft.id}/complete`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    fetchActive();
+  }
+
   async function handleLogout() {
     await fetch(`${API_URL}/auth/logout`, { method: "POST", headers: authHeaders() });
     sessionStorage.removeItem("auth_token");
@@ -506,6 +523,7 @@ export default function Dashboard({ username, onLogout }) {
           draft={activeDraft.draft}
           job={activeDraft.job}
           onCancel={handleCancel}
+          onComplete={handleComplete}
           aiEnabled={aiEnabled}
         />
       )}
