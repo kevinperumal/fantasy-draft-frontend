@@ -82,6 +82,135 @@ function useRecommendation(aiEnabled, draftPhase) {
   return { recommendation, loading, error, generate };
 }
 
+// ─── Admin panel (live draft tools + cache reload) ───────────────────────────
+
+const ADMIN_USERNAME = import.meta.env.VITE_ADMIN_USERNAME || "kevin";
+
+function AdminPanel() {
+  const [leagueId, setLeagueId] = useState("");
+  const [snippet, setSnippet] = useState(null);
+  const [snippetLoading, setSnippetLoading] = useState(false);
+  const [snippetError, setSnippetError] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  const [cacheLoading, setCacheLoading] = useState(false);
+  const [cacheResult, setCacheResult] = useState(null);
+  const [cacheError, setCacheError] = useState(null);
+
+  async function fetchSnippet() {
+    if (!leagueId.trim()) return;
+    setSnippetLoading(true);
+    setSnippetError(null);
+    setSnippet(null);
+    setCopied(false);
+    try {
+      const res = await fetch(
+        `${API_URL}/live-draft/snippet?leagueId=${encodeURIComponent(leagueId.trim())}`,
+        { headers: authHeaders() },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSnippetError(data.message || "Failed to fetch snippet");
+      } else {
+        setSnippet(data.snippet);
+      }
+    } catch {
+      setSnippetError("Could not reach the server");
+    } finally {
+      setSnippetLoading(false);
+    }
+  }
+
+  async function reloadCache() {
+    setCacheLoading(true);
+    setCacheResult(null);
+    setCacheError(null);
+    try {
+      const res = await fetch(`${API_URL}/recommendations/cache/reload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCacheError(data.message || "Cache reload failed");
+      } else {
+        setCacheResult(`Loaded ${data.playerCount ?? "?"} players`);
+      }
+    } catch {
+      setCacheError("Could not reach the server");
+    } finally {
+      setCacheLoading(false);
+    }
+  }
+
+  function copySnippet() {
+    if (!snippet) return;
+    navigator.clipboard.writeText(snippet).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div style={{ border: "1px solid #e0c060", borderRadius: 8, padding: "1.25rem", marginBottom: "1.5rem", background: "#fffdf0" }}>
+      <h2 style={{ marginTop: 0, fontSize: "1rem", color: "#92600a" }}>Admin Tools</h2>
+
+      {/* Live Draft Snippet */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <div style={{ fontWeight: 600, marginBottom: "0.5rem", fontSize: "0.9rem" }}>Live Draft Snippet</div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            type="text"
+            value={leagueId}
+            onChange={(e) => setLeagueId(e.target.value)}
+            placeholder="ESPN League ID"
+            style={{ flex: "1 1 160px", minWidth: 120, maxWidth: 220 }}
+          />
+          <button onClick={fetchSnippet} disabled={snippetLoading || !leagueId.trim()}>
+            {snippetLoading ? "Loading…" : "Get Snippet"}
+          </button>
+        </div>
+        {snippetError && <p style={{ color: "#dc2626", margin: "0.5rem 0 0", fontSize: "0.85rem" }}>{snippetError}</p>}
+        {snippet && (
+          <div style={{ marginTop: "0.75rem", position: "relative" }}>
+            <pre style={{
+              background: "#1e1e1e", color: "#d4d4d4", padding: "0.75rem 1rem",
+              borderRadius: 6, fontSize: "0.75rem", overflowX: "auto",
+              whiteSpace: "pre-wrap", wordBreak: "break-all", margin: 0,
+              maxHeight: 220,
+            }}>
+              {snippet}
+            </pre>
+            <button
+              onClick={copySnippet}
+              style={{
+                position: "absolute", top: 8, right: 8,
+                fontSize: "0.75rem", padding: "0.2rem 0.5rem",
+                background: copied ? "#16a34a" : "#374151", color: "#fff",
+                border: "none", borderRadius: 4, cursor: "pointer",
+              }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Cache Reload */}
+      <div>
+        <div style={{ fontWeight: 600, marginBottom: "0.5rem", fontSize: "0.9rem" }}>Player Cache</div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <button onClick={reloadCache} disabled={cacheLoading}>
+            {cacheLoading ? "Reloading…" : "Reload Player Cache"}
+          </button>
+          {cacheResult && <span style={{ color: "#16a34a", fontSize: "0.85rem" }}>{cacheResult}</span>}
+          {cacheError && <span style={{ color: "#dc2626", fontSize: "0.85rem" }}>{cacheError}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Active draft panel ───────────────────────────────────────────────────────
 
 function ActiveDraftPanel({ draft, job, onCancel, aiEnabled }) {
@@ -346,6 +475,8 @@ export default function Dashboard({ username, onLogout }) {
       </div>
 
       {loadError && <p style={{ color: "red" }}>{loadError}</p>}
+
+      {username === ADMIN_USERNAME && <AdminPanel />}
 
       {activeDraft === undefined && !loadError && (
         <p style={{ color: "#888" }}>Loading…</p>
