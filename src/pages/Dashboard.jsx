@@ -104,15 +104,30 @@ function AdminPanel() {
     setSnippet(null);
     setCopied(false);
     try {
-      const res = await fetch(
-        `${API_URL}/live-draft/snippet?leagueId=${encodeURIComponent(leagueId.trim())}`,
+      const id = leagueId.trim();
+
+      // Step 1: initialize — cancel stale drafts, provision sheets, set jobs to draft_live
+      const initRes = await fetch(`${API_URL}/live-draft/initialize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ leagueId: id }),
+      });
+      const initData = await initRes.json().catch(() => ({}));
+      if (!initRes.ok) {
+        setSnippetError(initData.message || "Initialize failed");
+        return;
+      }
+
+      // Step 2: fetch the observer-only snippet
+      const snippetRes = await fetch(
+        `${API_URL}/live-draft/snippet?leagueId=${encodeURIComponent(id)}`,
         { headers: authHeaders() },
       );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setSnippetError(data.message || "Failed to fetch snippet");
+      const snippetData = await snippetRes.json().catch(() => ({}));
+      if (!snippetRes.ok) {
+        setSnippetError(snippetData.message || "Failed to fetch snippet");
       } else {
-        setSnippet(data.snippet);
+        setSnippet(snippetData.snippet);
       }
     } catch {
       setSnippetError("Could not reach the server");
@@ -167,7 +182,7 @@ function AdminPanel() {
             style={{ flex: "1 1 160px", minWidth: 120, maxWidth: 220 }}
           />
           <button onClick={fetchSnippet} disabled={snippetLoading || !leagueId.trim()}>
-            {snippetLoading ? "Loading…" : "Get Snippet"}
+            {snippetLoading ? "Initializing…" : "Initialize + Get Snippet"}
           </button>
         </div>
         {snippetError && <p style={{ color: "#dc2626", margin: "0.5rem 0 0", fontSize: "0.85rem" }}>{snippetError}</p>}
