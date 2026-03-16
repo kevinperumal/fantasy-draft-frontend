@@ -134,7 +134,7 @@ function AdminPanel() {
       if (!res.ok) {
         setCacheError(data.message || "Cache reload failed");
       } else {
-        setCacheResult(`Loaded ${data.playerCount ?? "?"} players`);
+        setCacheResult(`Loaded ${data.players ?? "?"} players`);
       }
     } catch {
       setCacheError("Could not reach the server");
