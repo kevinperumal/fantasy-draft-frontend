@@ -485,7 +485,7 @@ export default function Dashboard({ username, onLogout }) {
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "1rem 1.25rem", boxSizing: "border-box" }}>
+    <div style={{ margin: "0 auto", padding: "1rem 1.25rem", boxSizing: "border-box" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
         <h1 style={{ margin: 0, whiteSpace: "nowrap" }}>DraftPilot</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexShrink: 0, flexWrap: "wrap" }}>
